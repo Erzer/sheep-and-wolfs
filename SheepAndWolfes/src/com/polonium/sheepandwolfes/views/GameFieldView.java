@@ -35,6 +35,10 @@ public class GameFieldView extends View {
     private TreeSet<Integer> mPossibleMoves;
     private int mSelectedCell = -1;
 
+    private float mSelectedX;
+    private float mSelectedY;
+    private boolean isDraging;
+
     public interface OnFieldTouch {
         TreeSet<Integer> onCellTouch(int cell);
     }
@@ -102,81 +106,120 @@ public class GameFieldView extends View {
     }
 
     private void drawSelectedCell(Canvas canvas) {
+        if (mPossibleMoves != null) {
+            for (Integer cell : mPossibleMoves) {
+                canvas.drawCircle(getCenterX(cell),
+                                  getCenterY(cell),
+                                  mRadius - TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+                                                                      4,
+                                                                      getResources().getDisplayMetrics()),
+                                  possibleMovePaint);
+            }
+        }
+
         if (mSelectedCell >= 0) {
-            canvas.drawCircle(getCenterX(mSelectedCell),
-                              getCenterY(mSelectedCell),
+            canvas.drawCircle(mSelectedX,
+                              mSelectedY,
+                              mRadius - TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+                                                                  4,
+                                                                  getResources().getDisplayMetrics()),
+                              (gameState.lastMove == GameState.WOLFS) ? sheepPaint : wolfPaint);
+            canvas.drawCircle(mSelectedX,
+                              mSelectedY,
                               mRadius - TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
                                                                   4,
                                                                   getResources().getDisplayMetrics()),
                               possibleMovePaint);
         }
 
-        if (mPossibleMoves != null) {
-            for (Integer cell : mPossibleMoves) {
-                canvas.drawCircle(getCenterX(cell),
-                                  getCenterY(cell),
-                                  mRadius- TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                                                                     4,
-                                                                     getResources().getDisplayMetrics()),
-                                  possibleMovePaint);
-            }
-        }
     }
-
-    private VelocityTracker mVelocityTracker = null;
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        // int index = event.getActionIndex();
         int action = event.getActionMasked();
-        // int pointerId = event.getPointerId(index);
 
         int touchedCell = calculateTouchedCell(event);
         switch (action) {
         case MotionEvent.ACTION_DOWN:
-            if (mVelocityTracker == null) {
-                // Retrieve a new VelocityTracker object to watch the velocity of a motion.
-                mVelocityTracker = VelocityTracker.obtain();
-            } else {
-                // Reset the velocity tracker back to its initial state.
-                mVelocityTracker.clear();
-            }
-            // Add a user's movement to the tracker.
-            mVelocityTracker.addMovement(event);
-            Log.d("", "Cell = " + touchedCell);
-
             if (mFieldTouchListener != null) {
                 TreeSet<Integer> moves = mFieldTouchListener.onCellTouch(touchedCell);
                 if (moves != null) {
                     mPossibleMoves = moves;
                     mSelectedCell = touchedCell;
+                    calcCursorPos(event);
+                    isDraging = true;
                 }
-                postInvalidate();
             }
-
             break;
         case MotionEvent.ACTION_MOVE:
-            mVelocityTracker.addMovement(event);
-            // When you want to determine the velocity, call
-            // computeCurrentVelocity(). Then call getXVelocity()
-            // and getYVelocity() to retrieve the velocity for each pointer ID.
-            mVelocityTracker.computeCurrentVelocity(1000);
-            // Log velocity of pixels per second
-            // Best practice to use VelocityTrackerCompat where possible.
-            // Log.d("", "X velocity: " +
-            // VelocityTrackerCompat.getXVelocity(mVelocityTracker,
-            // pointerId));
-            // Log.d("", "Y velocity: " +
-            // VelocityTrackerCompat.getYVelocity(mVelocityTracker,
-            // pointerId));
+            if (isDraging) calcCursorPos(event);
             break;
         case MotionEvent.ACTION_UP:
         case MotionEvent.ACTION_CANCEL:
-            // Return a VelocityTracker object back to be re-used by others.
-            mVelocityTracker.recycle();
+            if (isDraging) {
+                mFieldTouchListener.onCellTouch(getNearestCell(event));
+            }
+            isDraging = false;
             break;
         }
+        postInvalidate();
         return true;
+    }
+
+    private void calcCursorPos(MotionEvent event) {
+        if (mPossibleMoves != null) {
+            int nearestCell = getNearestCell(event);
+
+            float centerX = getCenterX(mSelectedCell);
+            float centerY = getCenterY(mSelectedCell);
+
+            float nearestCellX = getCenterX(nearestCell);
+            float nearestCellY = getCenterY(nearestCell);
+            float maxR = (float) Math.sqrt((centerX - nearestCellX) * (centerX - nearestCellX)
+                                           + (centerY - nearestCellY)
+                                           * (centerY - nearestCellY));
+            float dx = event.getX() - centerX;
+            float dy = event.getY() - centerY;
+            if (Math.abs(dx) <= Math.abs(dy)) {
+                mSelectedX = centerX + Math.abs(dx) * Math.signum(nearestCellX - centerX);
+                mSelectedY = centerY + Math.abs(dx) * Math.signum(nearestCellY - centerY);
+            } else {
+                mSelectedX = centerX + Math.abs(dy) * Math.signum(nearestCellX - centerX);
+                mSelectedY = centerY + Math.abs(dy) * Math.signum(nearestCellY - centerY);
+            }
+            if (dy * (nearestCellY - centerY) < 0 || dx * (nearestCellX - centerX) < 0) {
+                mSelectedX = centerX;
+                mSelectedY = centerY;
+            }
+            if (maxR < (float) Math.sqrt((centerX - mSelectedX) * (centerX - mSelectedX)
+                                         + (centerY - mSelectedY)
+                                         * (centerY - mSelectedY))) {
+                mSelectedX = nearestCellX;
+                mSelectedY = nearestCellY;
+            }
+        }
+    }
+
+    private int getNearestCell(MotionEvent event) {
+        int nearestCell = mSelectedCell;
+        float centerX = getCenterX(mSelectedCell);
+        float centerY = getCenterY(mSelectedCell);
+        float touchX = event.getX();
+        float touchY = event.getY();
+        float minR = (float) Math.sqrt((touchX - centerX) * (touchX - centerX)
+                                       + (touchY - centerY)
+                                       * (touchY - centerY));
+
+        for (Integer cell : mPossibleMoves) {
+            float cellX = getCenterX(cell);
+            float cellY = getCenterY(cell);
+            float r = (float) Math.sqrt((touchX - cellX) * (touchX - cellX) + (touchY - cellY) * (touchY - cellY));
+            if (minR > r) {
+                minR = r;
+                nearestCell = cell;
+            }
+        }
+        return nearestCell;
     }
 
     private int calculateTouchedCell(MotionEvent event) {
@@ -195,18 +238,20 @@ public class GameFieldView extends View {
     private void drawWofes(Canvas canvas) {
         if (gameState != null) {
             for (int wolfPos : gameState.wolfPositions) {
-                canvas.drawCircle(getCenterX(wolfPos),
-                                  getCenterY(wolfPos),
-                                  mRadius - TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                                                                      4,
-                                                                      getResources().getDisplayMetrics()),
-                                  wolfPaint);
+                if (wolfPos != mSelectedCell) {
+                    canvas.drawCircle(getCenterX(wolfPos),
+                                      getCenterY(wolfPos),
+                                      mRadius - TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+                                                                          4,
+                                                                          getResources().getDisplayMetrics()),
+                                      wolfPaint);
+                }
             }
         }
     }
 
     private void drawSheep(Canvas canvas) {
-        if (gameState != null) {
+        if (gameState != null && gameState.sheepPos != mSelectedCell) {
             canvas.drawCircle(getCenterX(gameState.sheepPos),
                               getCenterY(gameState.sheepPos),
                               mRadius - TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
@@ -229,8 +274,7 @@ public class GameFieldView extends View {
         for (Node node : gameField.getNodes()) {
             float x = getNodeCenterX(node);
             float y = getNodeCenterY(node);
-            canvas.drawCircle(x, y, mRadius,
-                              /*mPossibleMoves != null ? (mPossibleMoves.contains(node.getId()) ? possibleMovePaint : fieldPaint) :*/ fieldPaint);
+            canvas.drawCircle(x, y, mRadius, fieldPaint);
             for (Node near : node.getNear()) {
                 canvas.drawLine(getNodeCenterX(node),
                                 getNodeCenterY(node),

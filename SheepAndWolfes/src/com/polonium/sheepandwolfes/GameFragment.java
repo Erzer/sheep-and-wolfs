@@ -112,9 +112,11 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
         } else {
             wolfs = new UniversalAIMinimaxAlphaBeta(wolfsLevel - 3);
         }
-        if (mCurrentState != null || needRestart) {
+        if (needRestart) {
             initGame(new GameState(0, 28, 29, 30, 31));
             needRestart = false;
+        } else {
+            initGame(mCurrentState);
         }
         mCurrentSheep = sheepLevel;
         mCurrentWolfs = wolfsLevel;
