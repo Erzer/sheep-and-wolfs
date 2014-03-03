@@ -7,12 +7,14 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.PorterDuff.Mode;
 import android.graphics.PorterDuffColorFilter;
+import android.os.AsyncTask;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.animation.AnimationUtils;
 
 import com.polonium.sheepandwolfes.entity.field.GameField;
 import com.polonium.sheepandwolfes.entity.field.Node;
@@ -38,6 +40,8 @@ public class GameFieldView extends View {
     private float mSelectedX;
     private float mSelectedY;
     private boolean isDraging;
+    private OnAnimationListener onAnimationListener;
+    private MoveAnimation currentAnimation;
 
     public interface OnFieldTouch {
         TreeSet<Integer> onCellTouch(int cell);
@@ -56,6 +60,14 @@ public class GameFieldView extends View {
     public GameFieldView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
         init();
+    }
+
+    public OnAnimationListener getOnAnimationListener() {
+        return onAnimationListener;
+    }
+
+    public void setOnAnimationListener(OnAnimationListener onAnimationListener) {
+        this.onAnimationListener = onAnimationListener;
     }
 
     private void init() {
@@ -97,8 +109,8 @@ public class GameFieldView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        Log.i("canvas", "width = " + canvas.getWidth() + " height = " + canvas.getHeight());
-        Log.i("measured", "width = " + getMeasuredWidth() + " height = " + getMeasuredHeight());
+        // Log.i("canvas", "width = " + canvas.getWidth() + " height = " + canvas.getHeight());
+        // Log.i("measured", "width = " + getMeasuredWidth() + " height = " + getMeasuredHeight());
         drawField(canvas, getMeasuredWidth(), getMeasuredHeight());
         drawSheep(canvas);
         drawWofes(canvas);
@@ -302,9 +314,90 @@ public class GameFieldView extends View {
     }
 
     public void setState(GameState state) {
-        this.gameState = state;
+        gameState = state;
         mPossibleMoves = null;
         mSelectedCell = -1;
+        if (currentAnimation != null) currentAnimation.cancel();
         postInvalidate();
+    }
+
+    private int getSelectedCell(GameState oldState, GameState newState) {
+        if (oldState.sheepPos != newState.sheepPos) return oldState.sheepPos;
+        for (Integer oldWolf : oldState.wolfPositions) {
+            if (!newState.wolfPositions.contains(oldWolf)) {
+                return oldWolf;
+            }
+        }
+        return -1;
+    }
+
+    private int getSelectedCellDestination(GameState oldState, GameState newState) {
+        if (oldState.sheepPos != newState.sheepPos) return newState.sheepPos;
+        for (Integer newWolf : newState.wolfPositions) {
+            if (!oldState.wolfPositions.contains(newWolf)) {
+                return newWolf;
+            }
+        }
+        return -1;
+    }
+    
+    class MoveAnimation implements Runnable {
+        private GameState oldState, newState;
+        private int time;
+        private long startTime;
+        private boolean isCanceled = false;
+        private long lastTime;
+        private float speedX;
+        private float speedY;
+
+        public MoveAnimation(GameState oldState, GameState newState) {
+            this.oldState = oldState;
+            this.newState = newState;
+            lastTime = startTime = System.currentTimeMillis();
+            mSelectedCell = getSelectedCell(oldState, newState);
+            int selectedCellDestination = getSelectedCellDestination(oldState, newState);
+            mSelectedX = getCenterX(mSelectedCell);
+            mSelectedY = getCenterY(mSelectedCell);
+
+            float destX = getCenterX(selectedCellDestination);
+            float destY = getCenterY(selectedCellDestination);
+
+            time = 100;
+            speedX = (destX - mSelectedX) / time;
+            speedY = (destY - mSelectedY) / time;
+        }
+
+        public void cancel() {
+            isCanceled = true;
+        }
+
+        @Override
+        public void run() {
+           
+            long deltaTime = System.currentTimeMillis() - lastTime;
+            lastTime = System.currentTimeMillis();
+            mSelectedX += speedX * deltaTime;
+            mSelectedY += speedY * deltaTime;
+
+            if (System.currentTimeMillis() - startTime < time && !isCancelled()) {
+                postDelayed(this, 0);
+            } else {
+                if (!isCancelled()) {
+                    setState(newState);
+                    if (getOnAnimationListener() != null) getOnAnimationListener().onAnimationComplete();
+                }
+            }
+            invalidate();
+        }
+
+        private boolean isCancelled() {
+            return isCanceled;
+        }
+    }
+
+    public void morphToState(GameState state) {
+        removeCallbacks(currentAnimation);
+        currentAnimation = new MoveAnimation(this.gameState, state);
+        post(currentAnimation);
     }
 }

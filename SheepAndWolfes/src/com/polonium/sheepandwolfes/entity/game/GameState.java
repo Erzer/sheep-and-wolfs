@@ -14,7 +14,8 @@ public class GameState {
     public TreeSet<Integer> wolfPositions;
     public int rate = 0;
     public int lastMove = 0;
-
+    public int possibleRate = 0;
+    
     @SuppressWarnings("serial")
     private final static TreeSet<Integer> goals = new TreeSet<Integer>() {
         {
@@ -43,6 +44,8 @@ public class GameState {
     }
 
     public int heuristicRate(GameField field) {
+        if (wolfsWin(field)) return 256;
+        if (sheepWin()) return 0;
         field.fillBy(-1);
         field.getNodes().get(sheepPos).setValue(0);
         for (int pos : wolfPositions) {
@@ -72,6 +75,7 @@ public class GameState {
     
     public GameState getStateRated(GameField field){
         this.rate = heuristicRate(field);
+        this.possibleRate = 0;
         return this;
     }
     
@@ -84,10 +88,10 @@ public class GameState {
         Node node = field.getNodes().get(sheepPos);
         for (Node near : node.getNear()) {
             if (near.getValue() < 0) {
-                return true;
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     public boolean sheepWin() {

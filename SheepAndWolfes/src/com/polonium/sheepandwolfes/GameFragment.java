@@ -16,11 +16,15 @@ import com.polonium.sheepandwolfes.entity.field.GameField;
 import com.polonium.sheepandwolfes.entity.game.GameState;
 import com.polonium.sheepandwolfes.entity.player.OnMakeMoveListener;
 import com.polonium.sheepandwolfes.entity.player.Player;
-import com.polonium.sheepandwolfes.entity.player.SheepPlayer;
+import com.polonium.sheepandwolfes.entity.player.PlayerFactory;
+import com.polonium.sheepandwolfes.entity.player.SheepHuman;
+import com.polonium.sheepandwolfes.entity.player.SheepPlayerFactory;
 import com.polonium.sheepandwolfes.entity.player.UniversalAIMinimax;
 import com.polonium.sheepandwolfes.entity.player.UniversalAIMinimaxAlphaBeta;
-import com.polonium.sheepandwolfes.entity.player.WolfsPlayer;
+import com.polonium.sheepandwolfes.entity.player.WolfsHuman;
+import com.polonium.sheepandwolfes.entity.player.WolfsPlayerFactory;
 import com.polonium.sheepandwolfes.views.GameFieldView;
+import com.polonium.sheepandwolfes.views.OnAnimationListener;
 
 /**
  * A simple {@link android.support.v4.app.Fragment} subclass. Activities that contain this fragment must implement the
@@ -28,7 +32,7 @@ import com.polonium.sheepandwolfes.views.GameFieldView;
  * {@link GameFragment#newInstance} factory method to create an instance of this fragment.
  * 
  */
-public class GameFragment extends Fragment implements OnMakeMoveListener {
+public class GameFragment extends Fragment implements OnMakeMoveListener, OnAnimationListener {
 
     GameFieldView gameFieldView;
     private GameField gameField = new GameField();
@@ -39,7 +43,9 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
     private GameState mCurrentState;
     private int mCurrentSheep, mCurrentWolfs;
     private boolean needRestart = true;
-
+    private PlayerFactory sheepPlayerFactory = new SheepPlayerFactory();
+    private PlayerFactory wolfsPlayerFactory = new WolfsPlayerFactory();
+    
     public static GameFragment newInstance() {
         GameFragment fragment = new GameFragment();
         return fragment;
@@ -55,7 +61,8 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
         View view = inflater.inflate(R.layout.fragment_main, container, false);
 
         gameFieldView = (GameFieldView) view.findViewById(R.id.gameFieldView1);
-
+        gameFieldView.setOnAnimationListener(this);
+        
         startGame(0, 1);
         setHasOptionsMenu(true);
         return view;
@@ -73,6 +80,7 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
             sheep.gameOver(true);
             wolfs.gameOver(true);
             mListener.closeDrawer();
+            needRestart = true;
             startGame(mCurrentSheep, mCurrentWolfs);
             return true;
 
@@ -97,21 +105,9 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
 
     public void changePlayers(int sheepLevel, int wolfsLevel) {
         if (sheep != null) sheep.gameOver(true);
-        if (sheepLevel == 0) {
-            sheep = new SheepPlayer();
-        } else if (sheepLevel < 4) {
-            sheep = new UniversalAIMinimax(sheepLevel);
-        } else {
-            sheep = new UniversalAIMinimaxAlphaBeta(sheepLevel - 3);
-        }
+        sheep = sheepPlayerFactory.createPlayer(sheepLevel);
         if (wolfs != null) wolfs.gameOver(true);
-        if (wolfsLevel == 0) {
-            wolfs = new WolfsPlayer();
-        } else if (wolfsLevel < 4) {
-            wolfs = new UniversalAIMinimax(wolfsLevel);
-        } else {
-            wolfs = new UniversalAIMinimaxAlphaBeta(wolfsLevel - 3);
-        }
+        wolfs = wolfsPlayerFactory.createPlayer(wolfsLevel);
         if (needRestart) {
             initGame(new GameState(0, 28, 29, 30, 31));
             needRestart = false;
@@ -129,9 +125,13 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
 
     @Override
     public void onMoveComlete(Player player, GameState state) {
-        gameFieldView.setState(state);
+        gameFieldView.morphToState(state);
         mCurrentState = state;
-        if (!state.wolfsWin(gameField)) {
+    }
+
+    @Override
+    public void onAnimationComplete() {
+        if (mCurrentState.wolfsWin(gameField)) {
             // Toast.makeText(getActivity(), "Wolfs Wins", Toast.LENGTH_SHORT).show();
             showMessage("Волки победили");
             wolfs.gameOver(true);
@@ -139,7 +139,7 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
             needRestart = true;
             return;
         }
-        if (state.sheepWin()) {
+        if (mCurrentState.sheepWin()) {
             // Toast.makeText(getActivity(), "Sheep Wins", Toast.LENGTH_SHORT).show();
             showMessage("Овечка спаслась");
             sheep.gameOver(true);
@@ -147,10 +147,10 @@ public class GameFragment extends Fragment implements OnMakeMoveListener {
             needRestart = true;
             return;
         }
-        Player current = getNextPlayer(state).makeMove(state, this);
+        Player current = getNextPlayer(mCurrentState).makeMove(mCurrentState, this);
         gameFieldView.setFieldTouchListener(current.getFieldTouchListener());
     }
-
+    
     @Override
     public void onAttach(Activity activity) {
         super.onAttach(activity);

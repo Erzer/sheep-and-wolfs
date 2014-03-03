@@ -7,7 +7,7 @@ import com.polonium.sheepandwolfes.entity.field.Node;
 import com.polonium.sheepandwolfes.entity.game.GameState;
 import com.polonium.sheepandwolfes.views.GameFieldView.OnFieldTouch;
 
-public class SheepPlayer implements Player{
+public class SheepHuman implements Player{
     
     private GameField gameField = new GameField();
     private GameState currentState;
@@ -15,11 +15,11 @@ public class SheepPlayer implements Player{
     private TreeSet<Integer> possibleMoves;
     private OnMakeMoveListener makeMoveListener;
 
-    public SheepPlayer() {
+    public SheepHuman() {
     }
 
     @Override
-    public SheepPlayer makeMove(GameState gameState, OnMakeMoveListener listener) {
+    public SheepHuman makeMove(GameState gameState, OnMakeMoveListener listener) {
         makeMoveListener = listener;
         currentState = gameState;
         return this;
@@ -67,7 +67,7 @@ public class SheepPlayer implements Player{
                 if (possibleMoves.contains(cell)){
                     currentState.sheepPos = cell;
                     currentState.lastMove = GameState.SHEEP;
-                    if (makeMoveListener != null && !mGameOver) makeMoveListener.onMoveComlete(SheepPlayer.this, currentState);
+                    if (makeMoveListener != null && !mGameOver) makeMoveListener.onMoveComlete(SheepHuman.this, currentState);
                 }
             }
             return null;
